@@ -274,7 +274,17 @@ export default function Dashboard() {
         { url: `${API_URL}/v1/admin/wallet/balance`, setter: (data: any) => setWallet(data) },
         { url: `${API_URL}/v1/pnl/daily`, setter: (data: any) => setDailyPnL(data) },
         { url: `${API_URL}/v1/health/services`, setter: (data: any) => setServices(data.services || []) },
-        { url: `${API_URL}/v1/config/`, setter: (data: any) => setConfigs(data.configs || []) },
+        { url: `${API_URL}/v1/config/`, setter: (data: any) => {
+          // Convert config object to array format
+          if (data.config) {
+            const configArray = Object.entries(data.config).map(([key, val]: [string, any]) => ({
+              key,
+              value: typeof val === 'object' ? val.value : val,
+              description: typeof val === 'object' ? val.description : ''
+            }))
+            setConfigs(configArray)
+          }
+        }},
         { url: `${API_URL}/v1/admin/circuit-breakers`, setter: (data: any) => setCircuitBreakers(data.circuit_breakers || []) },
       ]
 
@@ -714,14 +724,12 @@ export default function Dashboard() {
     const [editValue, setEditValue] = useState('')
     const [portfolioSize, setPortfolioSize] = useState(wallet.balance || 500)
     const [recommended, setRecommended] = useState<any>(null)
-    const [networkConfig, setNetworkConfig] = useState<any>(null)
     const [proxyUrl, setProxyUrl] = useState('')
     const [proxyEnabled, setProxyEnabled] = useState(false)
     const [rpcUrl, setRpcUrl] = useState('')
     const [applyingRecommended, setApplyingRecommended] = useState(false)
     const [savingNetwork, setSavingNetwork] = useState(false)
 
-    // Fetch recommended settings
     const fetchRecommended = async (size: number) => {
       try {
         const res = await fetch(`${API_URL}/v1/config/recommended/${size}`)
@@ -734,13 +742,11 @@ export default function Dashboard() {
       }
     }
 
-    // Fetch network config
     const fetchNetworkConfig = async () => {
       try {
         const res = await fetch(`${API_URL}/v1/config/network`)
         if (res.ok) {
           const data = await res.json()
-          setNetworkConfig(data)
           setProxyEnabled(data.proxy_enabled || false)
           setProxyUrl(data.proxy_url || '')
           setRpcUrl(data.polygon_rpc_url || '')
@@ -755,7 +761,6 @@ export default function Dashboard() {
       fetchNetworkConfig()
     }, [])
 
-    // Apply recommended settings
     const applyRecommended = async () => {
       setApplyingRecommended(true)
       try {
@@ -764,210 +769,127 @@ export default function Dashboard() {
           headers: { 'Content-Type': 'application/json' }
         })
         if (res.ok) {
-          fetchData() // Refresh all data
-          alert('Recommended settings applied successfully!')
+          fetchData()
+          alert('Recommended settings applied!')
         }
       } catch (e) {
-        console.error('Failed to apply recommended settings:', e)
         alert('Failed to apply settings')
       }
       setApplyingRecommended(false)
     }
 
-    // Save network config
     const saveNetworkConfig = async () => {
       setSavingNetwork(true)
       try {
         const res = await fetch(`${API_URL}/v1/config/network`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            proxy_url: proxyUrl,
-            proxy_enabled: proxyEnabled,
-            polygon_rpc_url: rpcUrl,
-          })
+          body: JSON.stringify({ proxy_url: proxyUrl, proxy_enabled: proxyEnabled, polygon_rpc_url: rpcUrl })
         })
-        if (res.ok) {
-          alert('Network settings saved. Restart services to apply.')
-        }
+        if (res.ok) alert('Network settings saved. Restart services to apply.')
       } catch (e) {
-        console.error('Failed to save network config:', e)
         alert('Failed to save settings')
       }
       setSavingNetwork(false)
     }
 
-    const configGroups: Record<string, string[]> = {
-      'Trading Limits': ['trade_size_usd', 'max_position_per_market', 'daily_loss_limit_usd', 'max_open_positions'],
-      'Risk Management': ['correlation_cap_pct', 'take_profit_pct', 'stop_loss_pct'],
-      'Strategy': ['confidence_threshold', 'min_edge_required'],
+    const allConfigItems = [
+      { key: 'trade_size_usd', label: 'Trade Size (USD)' },
+      { key: 'max_position_per_market', label: 'Max Position/Market' },
+      { key: 'daily_loss_limit_usd', label: 'Daily Loss Limit' },
+      { key: 'max_open_positions', label: 'Max Open Positions' },
+      { key: 'take_profit_pct', label: 'Take Profit %' },
+      { key: 'stop_loss_pct', label: 'Stop Loss %' },
+      { key: 'correlation_cap_pct', label: 'Correlation Cap %' },
+      { key: 'confidence_threshold', label: 'Confidence Threshold' },
+      { key: 'min_edge_required', label: 'Min Edge Required' },
+      { key: 'min_liquidity_usd', label: 'Min Liquidity (USD)' },
+    ]
+
+    const half = Math.ceil(allConfigItems.length / 2)
+    const leftItems = allConfigItems.slice(0, half)
+    const rightItems = allConfigItems.slice(half)
+
+    const renderRow = (item: { key: string; label: string }) => {
+      const config = configs.find(c => c.key === item.key)
+      const isEditing = editingConfig === item.key
+      return (
+        <tr key={item.key} className="border-b border-slate-700/50">
+          <td className="py-2 text-sm">{item.label}</td>
+          <td className="py-2 text-right">
+            {isEditing ? (
+              <div className="flex items-center justify-end gap-1">
+                <input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} className="w-20 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-right text-sm" autoFocus />
+                <button onClick={() => { updateConfig(item.key, editValue); setEditingConfig(null); }} className="px-2 py-1 bg-green-600 hover:bg-green-500 rounded text-xs">✓</button>
+                <button onClick={() => setEditingConfig(null)} className="px-2 py-1 bg-gray-600 hover:bg-gray-500 rounded text-xs">✕</button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-end gap-2">
+                <span className="font-mono text-sm">{config?.value || '--'}</span>
+                <button onClick={() => { setEditingConfig(item.key); setEditValue(config?.value || ''); }} className="px-2 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs">Edit</button>
+              </div>
+            )}
+          </td>
+        </tr>
+      )
     }
 
     return (
-      <div className="space-y-6">
-        {/* Recommended Settings Section */}
-        <div className="card bg-gradient-to-br from-blue-900/30 to-purple-900/30 border border-blue-500/30">
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <Icons.TrendingUp />
-            Recommended Settings Calculator
-          </h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">Portfolio Size (USD)</label>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  value={portfolioSize}
-                  onChange={(e) => setPortfolioSize(Number(e.target.value))}
-                  className="flex-1 px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg"
-                />
-                <button
-                  onClick={() => fetchRecommended(portfolioSize)}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg"
-                >
-                  Calculate
-                </button>
-              </div>
-              <p className="text-xs text-gray-500 mt-1">Current balance: {formatCurrency(wallet.balance)}</p>
+      <div className="space-y-4">
+        {/* Recommended Settings - Compact */}
+        <div className="card">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-semibold flex items-center gap-2"><Icons.TrendingUp /> Recommended Settings</h2>
+            {recommended && <span className="text-xs text-gray-400 bg-slate-700 px-2 py-1 rounded">{recommended.risk_level}</span>}
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-400">Portfolio $</span>
+              <input type="number" value={portfolioSize} onChange={(e) => setPortfolioSize(Number(e.target.value))} className="w-24 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-sm" />
             </div>
+            <button onClick={() => fetchRecommended(portfolioSize)} className="px-3 py-1 bg-blue-600 hover:bg-blue-500 rounded text-sm">Calculate</button>
+            <button onClick={applyRecommended} disabled={applyingRecommended || !recommended} className="px-3 py-1 bg-green-600 hover:bg-green-500 rounded text-sm disabled:opacity-50">
+              {applyingRecommended ? 'Applying...' : 'Apply All'}
+            </button>
             {recommended && (
-              <div className="flex items-center">
-                <button
-                  onClick={applyRecommended}
-                  disabled={applyingRecommended}
-                  className="px-6 py-3 bg-green-600 hover:bg-green-500 rounded-lg font-semibold disabled:opacity-50"
-                >
-                  {applyingRecommended ? 'Applying...' : 'Apply Recommended Settings'}
-                </button>
+              <div className="flex gap-4 ml-auto text-sm">
+                <span><span className="text-gray-400">Trade:</span> <span className="text-green-400">${recommended.recommended.trade_size_usd}</span></span>
+                <span><span className="text-gray-400">Max:</span> <span className="text-blue-400">${recommended.recommended.max_position_per_market}</span></span>
+                <span><span className="text-gray-400">Loss:</span> <span className="text-red-400">${recommended.recommended.daily_loss_limit_usd}</span></span>
+                <span><span className="text-gray-400">Pos:</span> <span className="text-yellow-400">{recommended.recommended.max_open_positions}</span></span>
               </div>
             )}
           </div>
-          
-          {recommended && (
-            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="bg-slate-800/50 rounded-lg p-3">
-                <p className="text-xs text-gray-400">Trade Size</p>
-                <p className="font-semibold">${recommended.recommended.trade_size_usd}</p>
-              </div>
-              <div className="bg-slate-800/50 rounded-lg p-3">
-                <p className="text-xs text-gray-400">Max Position</p>
-                <p className="font-semibold">${recommended.recommended.max_position_per_market}</p>
-              </div>
-              <div className="bg-slate-800/50 rounded-lg p-3">
-                <p className="text-xs text-gray-400">Daily Loss Limit</p>
-                <p className="font-semibold">${recommended.recommended.daily_loss_limit_usd}</p>
-              </div>
-              <div className="bg-slate-800/50 rounded-lg p-3">
-                <p className="text-xs text-gray-400">Max Positions</p>
-                <p className="font-semibold">{recommended.recommended.max_open_positions}</p>
-              </div>
-            </div>
-          )}
-          
-          {recommended?.notes && (
-            <div className="mt-3 text-sm text-gray-400">
-              <ul className="list-disc list-inside space-y-1">
-                {recommended.notes.map((note: string, i: number) => (
-                  <li key={i}>{note}</li>
-                ))}
-              </ul>
-            </div>
-          )}
         </div>
 
-        {/* Network Settings */}
+        {/* Trading Parameters - Side by Side */}
         <div className="card">
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <Icons.Wifi />
-            Network Settings
-          </h2>
-          <div className="space-y-4">
-            <div className="flex items-center justify-between bg-slate-900 rounded-lg p-4">
-              <div>
-                <p className="font-medium">Enable Proxy</p>
-                <p className="text-sm text-gray-400">Route API calls through proxy (for Cloudflare bypass)</p>
-              </div>
+          <h2 className="font-semibold mb-3">Trading Parameters</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <table className="w-full"><tbody>{leftItems.map(renderRow)}</tbody></table>
+            <table className="w-full"><tbody>{rightItems.map(renderRow)}</tbody></table>
+          </div>
+        </div>
+
+        {/* Network Settings - Compact */}
+        <div className="card">
+          <h2 className="font-semibold mb-3 flex items-center gap-2"><Icons.Wifi /> Network Settings</h2>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-center">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-400">Proxy:</span>
               <label className="relative inline-flex items-center cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={proxyEnabled}
-                  onChange={(e) => setProxyEnabled(e.target.checked)}
-                  className="sr-only peer"
-                />
-                <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                <input type="checkbox" checked={proxyEnabled} onChange={(e) => setProxyEnabled(e.target.checked)} className="sr-only peer" />
+                <div className="w-9 h-5 bg-gray-600 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-blue-600"></div>
               </label>
             </div>
-            
-            <div className="bg-slate-900 rounded-lg p-4">
-              <label className="block font-medium mb-2">Proxy URL</label>
-              <input
-                type="text"
-                value={proxyUrl}
-                onChange={(e) => setProxyUrl(e.target.value)}
-                placeholder="http://user:pass@proxy.example.com:8080"
-                className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg"
-              />
-              <p className="text-xs text-gray-500 mt-1">Format: http://user:password@host:port</p>
+            <input type="text" value={proxyUrl} onChange={(e) => setProxyUrl(e.target.value)} placeholder="http://user:pass@host:port" className="px-3 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm" />
+            <input type="text" value={rpcUrl} onChange={(e) => setRpcUrl(e.target.value)} placeholder="Polygon RPC URL" className="px-3 py-1.5 bg-slate-800 border border-slate-600 rounded text-sm" />
+            <div className="flex items-center gap-2">
+              <button onClick={saveNetworkConfig} disabled={savingNetwork} className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 rounded text-sm disabled:opacity-50">{savingNetwork ? 'Saving...' : 'Save'}</button>
+              <span className="text-xs text-yellow-400">⚠ Restart required</span>
             </div>
-            
-            <div className="bg-slate-900 rounded-lg p-4">
-              <label className="block font-medium mb-2">Polygon RPC URL</label>
-              <input
-                type="text"
-                value={rpcUrl}
-                onChange={(e) => setRpcUrl(e.target.value)}
-                placeholder="https://polygon-rpc.com"
-                className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg"
-              />
-              <p className="text-xs text-gray-500 mt-1">Custom RPC for balance checks (default: polygon-rpc.com)</p>
-            </div>
-            
-            <button
-              onClick={saveNetworkConfig}
-              disabled={savingNetwork}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 rounded-lg disabled:opacity-50"
-            >
-              {savingNetwork ? 'Saving...' : 'Save Network Settings'}
-            </button>
-            <span className="ml-3 text-sm text-yellow-400">⚠ Requires service restart</span>
           </div>
         </div>
-
-        {/* Existing Config Groups */}
-        {Object.entries(configGroups).map(([group, keys]) => (
-          <div key={group} className="card">
-            <h2 className="text-lg font-semibold mb-4">{group}</h2>
-            <div className="space-y-3">
-              {keys.map(key => {
-                const config = configs.find(c => c.key === key)
-                const isEditing = editingConfig === key
-                
-                return (
-                  <div key={key} className="flex items-center justify-between bg-slate-900 rounded-lg p-4">
-                    <div>
-                      <p className="font-medium">{key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}</p>
-                      <p className="text-sm text-gray-400">{config?.description || ''}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {isEditing ? (
-                        <>
-                          <input type="text" value={editValue} onChange={(e) => setEditValue(e.target.value)} className="w-24 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-right" autoFocus />
-                          <button onClick={() => { updateConfig(key, editValue); setEditingConfig(null); }} className="px-2 py-1 bg-green-600 hover:bg-green-500 rounded text-sm">Save</button>
-                          <button onClick={() => setEditingConfig(null)} className="px-2 py-1 bg-gray-600 hover:bg-gray-500 rounded text-sm">Cancel</button>
-                        </>
-                      ) : (
-                        <>
-                          <span className="font-mono bg-slate-800 px-3 py-1 rounded">{config?.value || '--'}</span>
-                          <button onClick={() => { setEditingConfig(key); setEditValue(config?.value || ''); }} className="px-2 py-1 bg-blue-600 hover:bg-blue-500 rounded text-sm">Edit</button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        ))}
       </div>
     )
   }
