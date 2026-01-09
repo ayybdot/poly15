@@ -1,0 +1,14 @@
+# Logs
+logs/
+*.log
+
+# Node / Next / React
+node_modules/
+**/node_modules/
+.next/
+out/
+dist/
+
+# Env files / secrets
+.env
+.env.*

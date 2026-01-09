@@ -1,0 +1,36 @@
+﻿================================================================================
+PolyTrader Installation Summary
+Generated: 2026-01-08 12:00:30
+================================================================================
+
+INSTALLATION STATUS: COMPLETE
+
+ACCESS URLS:
+  Dashboard:  http://localhost:3000
+  API:        http://localhost:8000
+  API Docs:   http://localhost:8000/docs
+
+SERVICES:
+  PolyTrader-API    - FastAPI backend
+  PolyTrader-Worker - Trading worker (manual start)
+  PolyTrader-UI     - Next.js dashboard
+
+SERVICE MANAGEMENT:
+  Start:   C:\Users\Administrator\Desktop\PolyTrader\start_services.bat
+  Stop:    C:\Users\Administrator\Desktop\PolyTrader\stop_services.bat
+  Status:  C:\Users\Administrator\Desktop\PolyTrader\service_status.bat
+
+CONFIGURATION:
+  Environment: C:\Users\Administrator\Desktop\PolyTrader\backend\.env
+  Database:    C:\Users\Administrator\Desktop\PolyTrader\data\db_credentials.txt
+
+BEFORE LIVE TRADING:
+  1. Configure Polymarket credentials in .env
+  2. Review risk settings in dashboard Config page
+  3. Start bot via dashboard (Start button)
+
+LOGS:
+  Install logs: C:\Users\Administrator\Desktop\PolyTrader\install-logs\
+  Service logs: C:\Users\Administrator\Desktop\PolyTrader\logs\
+
+================================================================================
